@@ -221,11 +221,18 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
     setFocusPhase(focusPhase === phaseIdx ? null : phaseIdx);
   };
 
+  useEffect(() => {
+    if (printingPhase !== null) {
+      // Use setTimeout to ensure the browser has fully painted the DOM changes (hidden other phases)
+      const timer = setTimeout(() => {
+        window.print();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [printingPhase]);
+
   const handlePrintPhase = (idx: number) => {
     setPrintingPhase(idx);
-    setTimeout(() => {
-      window.print();
-    }, 100);
   };
 
   // ── Export / Import ──
