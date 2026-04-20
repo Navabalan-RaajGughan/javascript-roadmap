@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import {
   ROADMAP,
   totalTopics,
@@ -144,12 +144,19 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
   const [showStats, setShowStats] = useState(false);
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
   const [showPomodoro, setShowPomodoro] = useState(false);
+  const [printingPhase, setPrintingPhase] = useState<number | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const t = THEMES[theme];
   const pomodoro = usePomodoro(25, 5);
+
+  useEffect(() => {
+    const handleAfterPrint = () => setPrintingPhase(null);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, []);
 
   // ── Computed ──
   const completedCount = useMemo(
@@ -212,6 +219,13 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
 
   const toggleFocus = (phaseIdx: number): void => {
     setFocusPhase(focusPhase === phaseIdx ? null : phaseIdx);
+  };
+
+  const handlePrintPhase = (idx: number) => {
+    setPrintingPhase(idx);
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   // ── Export / Import ──
@@ -357,6 +371,7 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
   return (
     <div
       ref={containerRef}
+      className="main-container"
       style={{
         fontFamily: "'Instrument Sans', 'DM Sans', 'Segoe UI', sans-serif",
         background: t.bg,
@@ -398,6 +413,33 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
         .focus-star:hover { transform: scale(1.3); }
         .filter-pill { transition: all 0.2s ease; }
         .filter-pill:hover { border-color: #f0c040 !important; color: #f0c040 !important; }
+        
+        .phase-content.collapsed, .section-content.collapsed { display: none; }
+        .phase-content.expanded, .section-content.expanded { display: block; }
+        
+        @media print {
+          .main-container { background: #fff !important; color: #000 !important; min-height: auto !important; }
+          .phase-card { 
+            background: #fff !important; 
+            border: 2px solid #eee !important; 
+            box-shadow: none !important; 
+            break-inside: auto !important;
+            page-break-inside: auto !important;
+            margin-bottom: 24px !important;
+          }
+          .phase-content, .section-content { display: block !important; }
+          .print-section { 
+            break-inside: avoid !important; 
+            page-break-inside: avoid !important; 
+            padding-bottom: 10px !important;
+          }
+          .topic-row { break-inside: avoid !important; }
+          .no-print { display: none !important; }
+          
+          /* Override light/dark texts strictly for print to ensure legibility */
+          .print-text-dark { color: #111 !important; }
+          .print-bg-light { background: #fafafa !important; }
+        }
       `}</style>
 
       {/* HEADER */}
@@ -952,7 +994,7 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
           return (
             <div
               key={phase.phase}
-              className="phase-card"
+              className={`phase-card ${printingPhase !== null && printingPhase !== realPhaseIdx ? 'no-print' : ''}`}
               style={{
                 marginBottom: "10px",
                 borderRadius: "16px",
@@ -1033,6 +1075,7 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
                       {phase.phase}
                     </span>
                     <h2
+                      className="print-text-dark"
                       style={{
                         fontSize: "17px",
                         fontWeight: 600,
@@ -1082,14 +1125,35 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
                 </div>
 
                 <div
-                  style={{ textAlign: "right", flexShrink: 0 }}
-                  onClick={() => togglePhase(realPhaseIdx)}
+                  style={{ textAlign: "right", flexShrink: 0, display: "flex", alignItems: "center", gap: "10px" }}
                 >
+                  <button
+                    className="no-print action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrintPhase(realPhaseIdx);
+                    }}
+                    style={{
+                      background: "none",
+                      border: `1px solid ${t.border}`,
+                      color: t.textMuted,
+                      borderRadius: "6px",
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                    title="Download Phase as PDF"
+                  >
+                    📄 PDF
+                  </button>
                   <span
+                    onClick={() => togglePhase(realPhaseIdx)}
                     style={{
                       fontFamily: "'JetBrains Mono', monospace",
                       fontSize: "11px",
                       color: t.textMuted,
+                      cursor: "pointer",
                     }}
                   >
                     {pDone}/{pTotal}
@@ -1111,14 +1175,14 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
               </div>
 
               {/* Phase Content */}
-              {isExpanded && (
-                <div
-                  style={{
-                    padding: "0 20px 20px",
-                    animation: "fadeSlideIn 0.3s ease",
-                  }}
-                >
-                  {phase.sections.map((sec, si) => {
+              <div
+                className={`phase-content ${isExpanded ? 'expanded' : 'collapsed'}`}
+                style={{
+                  padding: "0 20px 20px",
+                  animation: isExpanded ? "fadeSlideIn 0.3s ease" : "none",
+                }}
+              >
+                {phase.sections.map((sec, si) => {
                     const realSi = ROADMAP[realPhaseIdx].sections.findIndex(
                       (s) => s.name === sec.name
                     );
@@ -1129,7 +1193,7 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
                         : true;
 
                     return (
-                      <div key={si} style={{ marginBottom: "6px" }}>
+                      <div key={si} className="print-section" style={{ marginBottom: "6px" }}>
                         <div
                           className="section-header"
                           onClick={() => toggleSection(sKey)}
@@ -1175,14 +1239,14 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
                           </span>
                         </div>
 
-                        {isSecExpanded && (
-                          <div
-                            style={{
-                              paddingLeft: "12px",
-                              animation: "fadeSlideIn 0.25s ease",
-                            }}
-                          >
-                            {sec.topics.map((topic, ti) => {
+                        <div
+                          className={`section-content ${isSecExpanded ? 'expanded' : 'collapsed'}`}
+                          style={{
+                            paddingLeft: "12px",
+                            animation: isSecExpanded ? "fadeSlideIn 0.25s ease" : "none",
+                          }}
+                        >
+                          {sec.topics.map((topic, ti) => {
                               // Find the real topic index in the original data
                               const origSection =
                                 ROADMAP[realPhaseIdx].sections[realSi];
@@ -1236,6 +1300,7 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
 
                                     {/* Topic text */}
                                     <span
+                                      className="print-text-dark"
                                       onClick={() => toggleTopic(tKey)}
                                       style={{
                                         fontSize: "13px",
@@ -1347,13 +1412,11 @@ export default function JavaScriptRoadmap(): React.JSX.Element {
                                 </div>
                               );
                             })}
-                          </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
-                </div>
-              )}
+              </div>
             </div>
           );
         })}
